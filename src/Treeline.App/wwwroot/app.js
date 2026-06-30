@@ -43,6 +43,7 @@ const persist = () => {
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const basename = (p) => (p || "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
+const trunc = (s, n = 34) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 function relTime(iso) {
   if (!iso) return "";
   const d = new Date(iso), s = (Date.now() - d.getTime()) / 1000;
@@ -173,7 +174,7 @@ function renderRepo(repo) {
     ? `<span class="chip chip-dirty"><span class="dot amber"></span>changes</span>`
     : `<span class="chip chip-clean"><span class="dot green"></span>clean</span>`;
   const abChip = (ab.ahead || ab.behind) ? `<span class="chip chip-ab">↑${ab.ahead} ↓${ab.behind}</span>` : "";
-  const branchChip = repo.currentBranch ? `<span class="chip chip-branch">⎇ ${esc(repo.currentBranch)}</span>` : `<span class="chip">detached</span>`;
+  const branchChip = repo.currentBranch ? `<span class="chip chip-branch" title="${esc(repo.currentBranch)}">⎇ ${esc(trunc(repo.currentBranch, 22))}</span>` : `<span class="chip">detached</span>`;
 
   return `
   <div class="repo ${open ? "open" : ""}" data-repo="${repo.id}">
@@ -194,33 +195,27 @@ function renderRepo(repo) {
 }
 
 function renderRepoBody(repo) {
-  return renderBranches(repo) + renderWorktrees(repo);
+  // Trees are the primary view; branches live behind a searchable popup.
+  return renderWorktrees(repo) + renderBranchesSummary(repo);
 }
 
-function renderBranches(repo) {
+function renderBranchesSummary(repo) {
   const branches = state.branchCache.get(repo.id);
-  const items = !branches ? `<div class="muted">Loading branches…</div>` :
-    branches.map((b) => `
-      <div class="row">
-        <div class="row-main">
-          <div class="row-title">
-            ${b.isCurrent ? `<span class="tag-main">current</span>` : ""}
-            <span class="${b.isRemote ? "" : "chip-branch"}" style="font-family:var(--mono);font-size:12.5px">${b.isRemote ? "🌐 " : "⎇ "}${esc(b.name)}</span>
-            ${(b.ahead || b.behind) ? `<span class="chip chip-ab">↑${b.ahead} ↓${b.behind}</span>` : ""}
-          </div>
-          <div class="row-sub">${b.lastCommitSubject ? esc(b.lastCommitSubject) : ""} ${b.lastCommitDate ? "· " + relTime(b.lastCommitDate) : ""}</div>
-        </div>
-        <div class="row-actions">
-          ${b.isRemote ? "" : `<button class="btn btn-ghost btn-sm" data-action="checkout" data-id="${repo.id}" data-wt="${esc(repo.path)}" data-branch="${esc(b.name)}">checkout</button>`}
-          ${(b.isCurrent || b.isRemote) ? "" : `<button class="btn btn-danger btn-sm" data-action="delete-branch" data-id="${repo.id}" data-branch="${esc(b.name)}">delete</button>`}
-        </div>
-      </div>`).join("");
+  let counts;
+  if (!branches) counts = `<span class="muted">loading…</span>`;
+  else {
+    const local = branches.filter((b) => !b.isRemote).length;
+    const remote = branches.filter((b) => b.isRemote).length;
+    counts = `<span class="muted">${local} local · ${remote} remote</span>`;
+  }
   return `
     <div>
-      <div class="section-title">Branches
-        <button class="btn btn-ghost btn-sm" data-action="create-branch" data-id="${repo.id}">+ new branch</button>
+      <div class="section-title">Branches ${counts}
+        <span class="grow">
+          <button class="btn btn-ghost btn-sm" data-action="view-branches" data-id="${repo.id}">View branches</button>
+          <button class="btn btn-ghost btn-sm" data-action="create-branch" data-id="${repo.id}">+ new branch</button>
+        </span>
       </div>
-      ${items || `<div class="muted">No branches.</div>`}
     </div>`;
 }
 
@@ -228,9 +223,11 @@ function renderWorktrees(repo) {
   const rows = repo.worktrees.map((wt) => renderWorktree(repo, wt)).join("");
   return `
     <div>
-      <div class="section-title">Worktrees
-        <button class="btn btn-ghost btn-sm" data-action="add-worktree" data-id="${repo.id}">+ add worktree</button>
-        <button class="btn btn-ghost btn-sm" data-action="prune" data-id="${repo.id}" title="git worktree prune">prune</button>
+      <div class="section-title">Worktrees <span class="muted">${repo.worktreeCount} tree${repo.worktreeCount === 1 ? "" : "s"}</span>
+        <span class="grow">
+          <button class="btn btn-ghost btn-sm" data-action="add-worktree" data-id="${repo.id}">+ add worktree</button>
+          <button class="btn btn-ghost btn-sm" data-action="prune" data-id="${repo.id}" title="git worktree prune">prune</button>
+        </span>
       </div>
       ${rows}
     </div>`;
@@ -243,9 +240,19 @@ function renderWorktree(repo, wt) {
   if (st.modified) statusBits.push(`<span class="chip chip-dirty">~${st.modified} modified</span>`);
   if (st.untracked) statusBits.push(`<span class="chip">?${st.untracked} new</span>`);
   if (st.conflicted) statusBits.push(`<span class="chip" style="color:var(--danger)">!${st.conflicted} conflict</span>`);
-  if (!st.isDirty) statusBits.push(`<span class="chip chip-clean">clean</span>`);
+  if (!st.isDirty) statusBits.push(`<span class="chip chip-clean"><span class="dot green"></span>clean</span>`);
+
+  const treeName = basename(wt.path);
+  const branchPill = wt.branch
+    ? `<span class="k">on</span><span class="pill pill-branch" title="${esc(wt.branch)}">⎇ ${esc(trunc(wt.branch))}</span>`
+    : `<span class="k">on</span><span class="pill">detached @ ${esc((wt.head || "").slice(0, 7))}</span>`;
   const ab = (wt.ahead || wt.behind) ? `<span class="chip chip-ab">↑${wt.ahead} ↓${wt.behind}</span>` : "";
-  const branch = wt.branch ? `<span class="chip chip-branch">⎇ ${esc(wt.branch)}</span>` : `<span class="chip">detached @ ${esc((wt.head || "").slice(0, 7))}</span>`;
+  const basePill = wt.upstream
+    ? `<span class="k">base</span><span class="pill pill-base" title="${esc(wt.upstream)}">↥ ${esc(trunc(wt.upstream))}</span>${ab}`
+    : `<span class="k">base</span><span class="muted" style="font-size:11.5px">no upstream</span>`;
+  const flags =
+    (wt.isLocked ? `<span class="chip" style="color:var(--warn)">locked</span>` : "") +
+    (!wt.exists ? `<span class="chip" style="color:var(--danger)">missing</span>` : "");
   const key = logKey(repo.id, wt.path);
   const logOpen = state.openLogs.has(key);
 
@@ -254,10 +261,10 @@ function renderWorktree(repo, wt) {
       <div class="row-main">
         <div class="row-title">
           ${wt.isMain ? `<span class="tag-main">main</span>` : ""}
-          ${branch}${ab}${statusBits.join("")}
-          ${wt.isLocked ? `<span class="chip" style="color:var(--warn)">locked</span>` : ""}
-          ${!wt.exists ? `<span class="chip" style="color:var(--danger)">missing</span>` : ""}
+          <span class="tree-name">🌳 ${esc(treeName)}</span>
         </div>
+        <div class="row-line">${branchPill}${basePill}</div>
+        <div class="row-line">${statusBits.join("")}${flags}</div>
         <div class="row-sub">${esc(wt.path)}</div>
       </div>
       <div class="row-actions">
@@ -304,6 +311,7 @@ $("content").addEventListener("click", async (e) => {
     case "fetch": return withSpin(t, () => gitOp(id, `/api/repos/${id}/fetch`, null, "Fetch"));
     case "pull": return gitOp(id, `/api/repos/${id}/pull`, { worktree: wt }, "Pull");
     case "checkout": return gitOp(id, `/api/repos/${id}/checkout`, { worktree: wt, branch }, `Checkout ${branch}`);
+    case "view-branches": return openBranchesModal(id);
     case "create-branch": return openCreateBranch(id);
     case "add-worktree": return openAddWorktree(id);
     case "prune": return gitOp(id, `/api/repos/${id}/prune`, null, "Prune worktrees");
@@ -347,14 +355,15 @@ async function gitOp(repoId, url, body, label) {
   } catch (err) { toast(`${label} failed`, err.message, "err"); }
 }
 
-async function destructive(url, payload, label, repoId) {
+async function destructive(url, payload, label, repoId, onDone) {
   try {
     const phase1 = await api.post(url, payload);          // no token -> server asks for confirmation
-    if (!phase1 || !phase1.requiresConfirmation) { reportOp(label, phase1); return softRefresh(); }
+    if (!phase1 || !phase1.requiresConfirmation) { reportOp(label, phase1); await softRefresh(); if (onDone) await onDone(); return; }
     confirmModal(label, phase1.summary, async () => {
       const r = await api.post(url, { ...payload, confirmToken: phase1.confirmToken });
       reportOp(label, r);
       await softRefresh();
+      if (onDone) await onDone();
     });
   } catch (err) { toast(`${label} failed`, err.message, "err"); }
 }
@@ -374,9 +383,15 @@ async function removeSource(id, name) {
   }, { soft: true });
 }
 
-/* Poll snapshot + refresh open details without server-side rebuild. */
-async function softRefresh() {
+/* Poll snapshot + refresh open details without server-side rebuild.
+   When force is false (background poll) we skip re-rendering if nothing changed,
+   so interaction animations never replay and the DOM stays stable. */
+let lastSig = null;
+async function softRefresh(force = true) {
   await loadSnapshot();
+  const sig = JSON.stringify(state.snapshot);
+  if (!force && sig === lastSig) return;
+  lastSig = sig;
   await refreshOpenDetails();
   render();
 }
@@ -445,6 +460,121 @@ function browseFolder(start) {
     }
     load(cur);
   });
+}
+
+function findRepo(id) {
+  for (const node of state.snapshot?.sources || [])
+    for (const repo of node.repositories) if (repo.id === id) return repo;
+  return null;
+}
+
+/* Branches popup: search, local/remote filter, pagination, checkout/delete. Stands on its own overlay. */
+function openBranchesModal(repoId) {
+  const repo = findRepo(repoId);
+  if (!repo) return;
+  const PAGE = 10;
+  let all = [], query = "", filter = "all", page = 1;
+
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+
+  ov.innerHTML = `
+    <div class="modal" style="width:640px">
+      <div class="bx-head">
+        <h3>Branches — ${esc(repo.name)}</h3>
+        <button class="btn btn-ghost btn-sm" id="bxClose">✕ Close</button>
+      </div>
+      <div class="bx-tools">
+        <input class="bx-search" type="text" id="bxSearch" placeholder="Search branches…" autofocus />
+        <div class="filter-chips" id="bxFilters"></div>
+      </div>
+      <div class="bx-list" id="bxList"><div class="bx-empty">Loading…</div></div>
+      <div class="bx-foot" id="bxFoot"></div>
+    </div>`;
+
+  const $$ = (id) => ov.querySelector(id);
+  $$("#bxClose").onclick = close;
+  const search = $$("#bxSearch");
+  search.oninput = () => { query = search.value; page = 1; paint(); };
+
+  function filtered() {
+    const q = query.toLowerCase();
+    return all.filter((b) =>
+      (filter === "all" || (filter === "local" && !b.isRemote) || (filter === "remote" && b.isRemote)) &&
+      b.name.toLowerCase().includes(q));
+  }
+
+  function paintFilters() {
+    const local = all.filter((b) => !b.isRemote).length;
+    const remote = all.filter((b) => b.isRemote).length;
+    const defs = [["all", "All", all.length], ["local", "Local", local], ["remote", "Remote", remote]];
+    $$("#bxFilters").innerHTML = defs.map(([f, label, n]) =>
+      `<button class="fchip ${filter === f ? "active" : ""}" data-f="${f}">${label} ${n}</button>`).join("");
+    ov.querySelectorAll(".fchip").forEach((c) => (c.onclick = () => { filter = c.dataset.f; page = 1; paint(); }));
+  }
+
+  function paint() {
+    paintFilters();
+    const f = filtered();
+    const pages = Math.max(1, Math.ceil(f.length / PAGE));
+    if (page > pages) page = pages;
+    const slice = f.slice((page - 1) * PAGE, page * PAGE);
+
+    $$("#bxList").innerHTML = slice.length ? slice.map((b) => {
+      const base = b.upstream ? `base: ${esc(b.upstream)}` : (b.isRemote ? "remote-tracking branch" : "no upstream");
+      const ab = (b.ahead || b.behind) ? ` · ↑${b.ahead} ↓${b.behind}` : "";
+      const when = b.lastCommitDate ? ` · ${relTime(b.lastCommitDate)}` : "";
+      const subj = b.lastCommitSubject ? ` · ${esc(b.lastCommitSubject)}` : "";
+      return `
+        <div class="brow">
+          <div class="brow-main">
+            <div class="bname ${b.isRemote ? "remote" : "local"}">
+              ${b.isCurrent ? `<span class="tag-main">current</span> ` : ""}${b.isRemote ? "🌐 " : "⎇ "}${esc(b.name)}
+            </div>
+            <div class="bsub">${base}${ab}${when}${subj}</div>
+          </div>
+          <div class="brow-actions">
+            ${b.isRemote ? "" : `<button class="btn btn-ghost btn-sm" data-co="${esc(b.name)}">checkout</button>`}
+            ${(b.isCurrent || b.isRemote) ? "" : `<button class="btn btn-danger btn-sm" data-del="${esc(b.name)}">delete</button>`}
+          </div>
+        </div>`;
+    }).join("") : `<div class="bx-empty">No matching branches.</div>`;
+
+    $$("#bxFoot").innerHTML = `
+      <span class="muted">${f.length} branch${f.length === 1 ? "" : "es"}</span>
+      <div class="pager">
+        <button class="btn btn-ghost btn-sm" id="bxPrev" ${page <= 1 ? "disabled" : ""}>← Prev</button>
+        <span>Page ${page} / ${pages}</span>
+        <button class="btn btn-ghost btn-sm" id="bxNext" ${page >= pages ? "disabled" : ""}>Next →</button>
+      </div>`;
+    $$("#bxPrev").onclick = () => { if (page > 1) { page--; paint(); } };
+    $$("#bxNext").onclick = () => { if (page < pages) { page++; paint(); } };
+    ov.querySelectorAll("[data-co]").forEach((btn) => (btn.onclick = () => doCheckout(btn.dataset.co)));
+    ov.querySelectorAll("[data-del]").forEach((btn) => (btn.onclick = () => doDelete(btn.dataset.del)));
+  }
+
+  async function reload() {
+    try { all = await api.get(`/api/repos/${repoId}/branches`); state.branchCache.set(repoId, all); }
+    catch { all = []; }
+    paint();
+  }
+  async function doCheckout(branch) {
+    try {
+      const r = await api.post(`/api/repos/${repoId}/checkout`, { worktree: repo.path, branch });
+      reportOp(`Checkout ${branch}`, r);
+      await softRefresh(); await reload();
+    } catch (err) { toast("Checkout failed", err.message, "err"); }
+  }
+  function doDelete(branch) {
+    destructive(`/api/repos/${repoId}/branch/delete`, { name: branch, force: false }, `Delete branch ${branch}`, repoId, reload);
+  }
+
+  reload();
 }
 
 function openAddSource() {
@@ -577,7 +707,7 @@ document.documentElement.dataset.theme = state.theme;
 /* ---------------- Boot + polling ---------------- */
 async function tick() {
   if (!state.autoRefresh) return;
-  try { await softRefresh(); } catch { /* transient */ }
+  try { await softRefresh(false); } catch { /* transient */ }
 }
 (async function boot() {
   await loadHealth();
