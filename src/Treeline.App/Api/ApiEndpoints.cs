@@ -52,6 +52,26 @@ public static class ApiEndpoints
             return Results.Ok(await git.GetLogAsync(wt.Path, skip ?? 0, take ?? 5));
         });
 
+        // ---- filesystem (folder picker + reveal) ----
+        api.MapGet("/fs", (string? path, FileSystemBrowser fs) =>
+        {
+            try { return Results.Ok(fs.Browse(path)); }
+            catch (DirectoryNotFoundException) { return Results.BadRequest(Err("Directory not found.")); }
+            catch (Exception ex) { return Results.BadRequest(Err(ex.Message)); }
+        });
+
+        api.MapPost("/fs/reveal", (RevealRequest req) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Path) || !Directory.Exists(req.Path))
+                return Results.BadRequest(Err("Path does not exist."));
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(req.Path) { UseShellExecute = true });
+                return Results.Ok(new { ok = true });
+            }
+            catch (Exception ex) { return Results.BadRequest(Err(ex.Message)); }
+        });
+
         // ---- sources ----
         api.MapGet("/sources", (SourceManager sources) => Results.Ok(sources.All()));
 

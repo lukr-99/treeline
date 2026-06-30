@@ -77,6 +77,7 @@ internal static class Program
         builder.Services.AddSingleton<ISourceStore>(_ => new SourceStore());
         builder.Services.AddSingleton<IConfigStore>(_ => new ConfigStore());
         builder.Services.AddSingleton<RepositoryScanner>();
+        builder.Services.AddSingleton<FileSystemBrowser>();
         builder.Services.AddSingleton<SourceManager>();
         builder.Services.AddSingleton<ConfirmationService>();
         builder.Services.AddSingleton<SnapshotService>();

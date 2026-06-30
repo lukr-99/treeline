@@ -9,6 +9,7 @@ public sealed record PullRequest(string Worktree);
 public sealed record CheckoutRequest(string Worktree, string Branch);
 public sealed record CreateBranchRequest(string Name, string? From);
 public sealed record AddWorktreeRequest(string Path, string? Branch, bool CreateBranch);
+public sealed record RevealRequest(string Path);
 
 // Destructive request payloads carry an optional confirmation token (two-phase).
 public sealed record RemoveWorktreeRequest(string Worktree, bool Force, string? ConfirmToken);

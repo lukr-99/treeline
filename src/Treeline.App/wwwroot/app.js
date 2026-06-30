@@ -151,6 +151,7 @@ function renderSource(node) {
       </div>
       <div class="source-meta">
         <span class="count">${node.repositories.length} repo${node.repositories.length === 1 ? "" : "s"}</span>
+        <button class="btn btn-ghost btn-icon btn-sm" title="Open in Explorer" data-action="reveal" data-path="${esc(s.path)}">📂</button>
         <button class="btn btn-ghost btn-icon btn-sm" title="Refresh this source" data-action="refresh-source" data-id="${s.id}"><span class="ico-refresh">↻</span></button>
         <button class="btn btn-ghost btn-icon btn-sm" title="Stop tracking" data-action="remove-source" data-id="${s.id}" data-name="${esc(sourceName(s))}">✕</button>
       </div>
@@ -184,6 +185,7 @@ function renderRepo(repo) {
       ${statusChip}${abChip}
       <div class="repo-actions">
         <button class="btn btn-ghost btn-sm" title="git fetch --all" data-action="fetch" data-id="${repo.id}">fetch</button>
+        <button class="btn btn-ghost btn-icon btn-sm" title="Open in Explorer" data-action="reveal" data-path="${esc(repo.path)}">📂</button>
         <button class="btn btn-ghost btn-icon btn-sm" title="Refresh repo" data-action="refresh-repo" data-id="${repo.id}"><span class="ico-refresh">↻</span></button>
       </div>
     </div>
@@ -259,6 +261,7 @@ function renderWorktree(repo, wt) {
         <div class="row-sub">${esc(wt.path)}</div>
       </div>
       <div class="row-actions">
+        <button class="btn btn-ghost btn-icon btn-sm" title="Open in Explorer" data-action="reveal" data-path="${esc(wt.path)}">📂</button>
         <button class="btn btn-ghost btn-sm" data-action="toggle-log" data-id="${repo.id}" data-wt="${esc(wt.path)}">${logOpen ? "hide log" : "log"}</button>
         <button class="btn btn-ghost btn-sm" data-action="pull" data-id="${repo.id}" data-wt="${esc(wt.path)}" title="git pull --ff-only">pull</button>
         <button class="btn btn-danger btn-sm" data-action="discard" data-id="${repo.id}" data-wt="${esc(wt.path)}" ${st.isDirty ? "" : "disabled"} title="Discard all local changes">discard</button>
@@ -290,6 +293,7 @@ $("content").addEventListener("click", async (e) => {
   e.stopPropagation();
   switch (action) {
     case "add-source": return openAddSource();
+    case "reveal": return openExplorer(t.dataset.path);
     case "toggle-source": toggleSet(state.collapsedSources, id); persist(); return render();
     case "toggle-repo": return toggleRepo(id);
     case "toggle-log": return toggleLog(id, wt);
@@ -384,6 +388,65 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal
 
 function showModal(html) { $("modal").innerHTML = html; $("modalOverlay").hidden = false; }
 
+async function openExplorer(path) {
+  try { await api.post("/api/fs/reveal", { path }); }
+  catch (err) { toast("Open failed", err.message, "err"); }
+}
+
+/* Server-backed folder picker. Resolves to a path string, or null if cancelled. */
+function browseFolder(start) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    document.body.appendChild(ov);
+    let cur = start || "";
+    const done = (val) => { ov.remove(); resolve(val); };
+    ov.addEventListener("click", (e) => { if (e.target === ov) done(null); });
+
+    async function load(path) {
+      let data;
+      try { data = await api.get("/api/fs" + (path ? `?path=${encodeURIComponent(path)}` : "")); }
+      catch (err) { toast("Browse failed", err.message, "err"); return; }
+      cur = data.path || "";
+      paint(data);
+    }
+    function paint(data) {
+      const rows = data.entries.length
+        ? data.entries.map((en) => `
+            <div class="fs-row" data-path="${esc(en.path)}">
+              <span class="fs-ico">${en.isRepo ? "🌿" : "📁"}</span>
+              <span class="fs-name">${esc(en.name)}</span>
+              ${en.isRepo ? `<span class="badge badge-repo">repo</span>` : ""}
+              <button class="btn btn-ghost btn-sm fs-pick" data-pick="${esc(en.path)}">select</button>
+            </div>`).join("")
+        : `<div class="fs-empty">No subfolders here</div>`;
+      ov.innerHTML = `
+        <div class="modal" style="width:560px">
+          <h3>Select a folder</h3>
+          <div class="fs-bar">
+            <button class="btn btn-ghost btn-sm" id="fsUp" ${data.isRoot ? "disabled" : ""}>↑ Up</button>
+            <button class="btn btn-ghost btn-sm" id="fsRoot">This PC</button>
+            <span class="fs-cur">${data.isRoot ? "This PC — drives" : esc(cur)}</span>
+          </div>
+          <div class="fs-list">${rows}</div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="fsCancel">Cancel</button>
+            <button class="btn btn-primary" id="fsUse" ${data.isRoot ? "disabled" : ""}>Select this folder</button>
+          </div>
+        </div>`;
+      ov.querySelector("#fsCancel").onclick = () => done(null);
+      ov.querySelector("#fsUse").onclick = () => done(cur);
+      ov.querySelector("#fsRoot").onclick = () => load("");
+      ov.querySelector("#fsUp").onclick = () => load(data.parent || "");
+      ov.querySelectorAll(".fs-row").forEach((row) => {
+        row.onclick = (e) => { if (e.target.closest(".fs-pick")) return; load(row.dataset.path); };
+      });
+      ov.querySelectorAll(".fs-pick").forEach((b) => { b.onclick = (e) => { e.stopPropagation(); done(b.dataset.pick); }; });
+    }
+    load(cur);
+  });
+}
+
 function openAddSource() {
   showModal(`
     <h3>Add source</h3>
@@ -393,7 +456,10 @@ function openAddSource() {
       <button class="btn" id="typeFolder">Folder (scan)</button>
     </div>
     <label>Path</label>
-    <input type="text" id="srcPath" placeholder="C:\\Users\\you\\Code\\my-project" autofocus />
+    <div class="input-row">
+      <input type="text" id="srcPath" placeholder="C:\\Users\\you\\Code\\my-project" autofocus />
+      <button class="btn btn-ghost" id="srcBrowse" type="button">Browse…</button>
+    </div>
     <label>Display name (optional)</label>
     <input type="text" id="srcName" placeholder="My project" />
     <div id="depthWrap" style="display:none">
@@ -409,6 +475,7 @@ function openAddSource() {
   const depthWrap = $("depthWrap");
   $("typeRepo").onclick = () => { type = "repo"; $("typeRepo").classList.add("active"); $("typeFolder").classList.remove("active"); depthWrap.style.display = "none"; };
   $("typeFolder").onclick = () => { type = "folder"; $("typeFolder").classList.add("active"); $("typeRepo").classList.remove("active"); depthWrap.style.display = "block"; };
+  $("srcBrowse").onclick = async () => { const p = await browseFolder($("srcPath").value.trim()); if (p) $("srcPath").value = p; };
   wireClose();
   $("srcSubmit").onclick = async () => {
     const path = $("srcPath").value.trim();
@@ -451,7 +518,10 @@ function openAddWorktree(repoId) {
     <h3>Add worktree</h3>
     <p>Create a new linked working directory for this repository.</p>
     <label>New worktree path</label>
-    <input type="text" id="wPath" placeholder="C:\\Users\\you\\Code\\my-project-feature" autofocus />
+    <div class="input-row">
+      <input type="text" id="wPath" placeholder="C:\\Users\\you\\Code\\my-project-feature" autofocus />
+      <button class="btn btn-ghost" id="wBrowse" type="button">Browse…</button>
+    </div>
     <label>Branch</label>
     <input type="text" id="wBranch" placeholder="feature/my-change" />
     <label class="confirm-check"><input type="checkbox" id="wNew" /> Create this branch (otherwise check out an existing one)</label>
@@ -460,6 +530,8 @@ function openAddWorktree(repoId) {
       <button class="btn btn-ghost" data-close>Cancel</button>
       <button class="btn btn-primary" id="wSubmit">Add worktree</button>
     </div>`);
+  // For a new worktree the path must not exist yet, so Browse picks the parent folder.
+  $("wBrowse").onclick = async () => { const p = await browseFolder($("wPath").value.trim()); if (p) { $("wPath").value = p.replace(/[\\/]+$/, "") + "\\"; $("wPath").focus(); } };
   wireClose();
   $("wSubmit").onclick = async () => {
     const path = $("wPath").value.trim();
