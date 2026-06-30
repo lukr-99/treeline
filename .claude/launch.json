@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "treeline-preview",
+      "runtimeExecutable": "src/Treeline.App/bin/Debug/net10.0-windows/Treeline.exe",
+      "runtimeArgs": ["--headless", "--port", "8801"],
+      "port": 8801
+    }
+  ]
+}

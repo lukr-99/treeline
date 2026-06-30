@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Treeline</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 256 256" aria-hidden="true">
+        <defs>
+          <linearGradient id="brandTrunk" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#10b981"/>
+            <stop offset="1" stop-color="#34d399"/>
+          </linearGradient>
+        </defs>
+        <g fill="none" stroke-width="16" stroke-linecap="round">
+          <path d="M86 64 V196" stroke="url(#brandTrunk)"/>
+          <path d="M86 116 C128 116 150 90 180 90" stroke="#6ee7b7"/>
+          <path d="M86 150 C110 150 128 184 152 184" stroke="#2dd4bf"/>
+        </g>
+        <g fill="var(--bg)">
+          <circle cx="86" cy="64" r="19" stroke="#34d399" stroke-width="9"/>
+          <circle cx="86" cy="196" r="19" stroke="#34d399" stroke-width="9"/>
+          <circle cx="180" cy="90" r="19" stroke="#6ee7b7" stroke-width="9"/>
+          <circle cx="152" cy="184" r="19" stroke="#2dd4bf" stroke-width="9"/>
+        </g>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">Treeline</span>
+        <span class="brand-sub" id="gitVersion">connecting…</span>
+      </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="toolbar">
+      <span class="updated" id="updated" title="Last update from the server"></span>
+      <label class="switch" title="Auto-refresh every 10 seconds">
+        <input type="checkbox" id="autoRefresh" checked />
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+        <span class="switch-label">Auto</span>
+      </label>
+      <button class="btn btn-ghost" id="themeBtn" title="Toggle theme">◐</button>
+      <button class="btn btn-ghost" id="refreshAllBtn" title="Refresh everything now">
+        <span class="ico-refresh">↻</span> Refresh
+      </button>
+      <button class="btn btn-primary" id="addSourceBtn">+ Add source</button>
+    </div>
+  </header>
+
+  <main id="content" class="content">
+    <div class="empty" id="loading">Loading…</div>
+  </main>
+
+  <!-- Toasts -->
+  <div class="toasts" id="toasts"></div>
+
+  <!-- Generic modal host -->
+  <div class="modal-overlay" id="modalOverlay" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
