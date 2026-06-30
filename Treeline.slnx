@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Treeline.App/Treeline.App.csproj" />
+    <Project Path="src/Treeline.Core/Treeline.Core.csproj" />
+  </Folder>
+</Solution>

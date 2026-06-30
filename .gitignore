@@ -1,0 +1,18 @@
+# Build output
+bin/
+obj/
+publish/
+*.user
+
+# Rider / VS
+.idea/
+.vs/
+
+# Local runtime data (the SQLite db lives in %APPDATA%\Treeline, but ignore any local copies)
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+Thumbs.db
+.DS_Store
