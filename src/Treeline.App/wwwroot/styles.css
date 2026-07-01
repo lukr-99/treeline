@@ -125,8 +125,10 @@ body {
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-primary { --btn-trace-color: color-mix(in srgb, var(--bg-elev) 74%, white 26%); }
+:root[data-theme="light"] .btn-primary { --btn-trace-color: color-mix(in srgb, var(--accent) 70%, #04221a); }
 .btn-primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white), var(--accent)); border-color: var(--accent); color: #042015; }
-.btn-primary:hover { filter: brightness(1.06); border-color: var(--accent); }
+/* Keep the green gradient on hover — base .btn:hover would otherwise swap it for --card-2. */
+.btn-primary:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white), var(--accent)); filter: brightness(1.06); border-color: var(--accent); }
 .btn-ghost { background: transparent; }
 .btn-danger { --btn-trace-color: color-mix(in srgb, var(--danger) 88%, white 8%); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 .btn-danger:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); border-color: var(--danger); color: var(--danger); }
