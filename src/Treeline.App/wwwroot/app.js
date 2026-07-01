@@ -153,7 +153,7 @@ function syncButtonTrace(btn) {
   const leadDuration = durationFromLength(Math.max(...leadLengths, 1), 210, 0.24, 0.62);
   const sweepDuration = durationFromLength(Math.max(...sweepLengths, 1), 265, 0.42, 1.18);
   const sweepDelay = clamp(leadDuration * 0.42, 0.08, 0.22);
-  const leadExitDelay = clamp(sweepDuration * 0.58, 0.18, 0.46);
+  const leadExitDelay = clamp(sweepDuration * 0.9, 0.18, 1.1);
   btn.style.setProperty("--trace-lead-duration", `${leadDuration}s`);
   btn.style.setProperty("--trace-sweep-duration", `${sweepDuration}s`);
   btn.style.setProperty("--trace-sweep-delay", `${sweepDelay}s`);

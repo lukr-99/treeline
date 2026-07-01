@@ -153,24 +153,30 @@ body {
 }
 .btn > :not(.btn-border-trace):not(.btn-trace__trace) { position: relative; z-index: 1; }
 .btn.trace-on .trace-path--lead {
-  animation: traceDraw var(--trace-lead-duration) cubic-bezier(.24, 1, .3, 1) forwards;
+  animation: traceDraw var(--trace-lead-duration) cubic-bezier(.24, 1, .3, 1) both;
 }
 .btn.trace-on .trace-path--sweep {
-  animation: traceDraw var(--trace-sweep-duration) cubic-bezier(.2, 1, .22, 1) var(--trace-sweep-delay) forwards;
+  animation: traceDraw var(--trace-sweep-duration) cubic-bezier(.2, 1, .22, 1) var(--trace-sweep-delay) both;
 }
 .btn.trace-off .trace-path--lead {
-  animation: traceErase var(--trace-lead-duration) cubic-bezier(.34, 0, .7, .98) var(--trace-lead-exit-delay) forwards;
+  animation: traceErase var(--trace-lead-duration) cubic-bezier(.34, 0, .3, .98) var(--trace-lead-exit-delay) both;
 }
 .btn.trace-off .trace-path--sweep {
-  animation: traceErase var(--trace-sweep-duration) cubic-bezier(.34, 0, .7, .98) forwards;
+  animation: traceRetract var(--trace-sweep-duration) cubic-bezier(.34, 0, .7, .98) both;
 }
 @keyframes traceDraw {
   from { stroke-dashoffset: var(--trace-length); opacity: 1; }
   to { stroke-dashoffset: 0; opacity: 1; }
 }
+/* Bottom line: retracts AND fades out. */
 @keyframes traceErase {
   from { stroke-dashoffset: 0; opacity: 1; }
   to { stroke-dashoffset: var(--trace-length); opacity: 0; }
+}
+/* Sides + top: retract only, no opacity fade. */
+@keyframes traceRetract {
+  from { stroke-dashoffset: 0; opacity: 1; }
+  to { stroke-dashoffset: var(--trace-length); opacity: 1; }
 }
 
 /* View layouts */
@@ -250,7 +256,7 @@ body {
 .btn-trace__label {
   position: relative; z-index: 1; font-size: 20px; letter-spacing: -.2px;
   text-shadow: 0 1px 12px rgba(255,255,255,.08);
-  transition: transform .38s var(--ease-spring), letter-spacing .3s var(--ease-out);
+  transition: transform .38s var(--ease-spring), letter-spacing .45s var(--ease-out);
 }
 .btn-trace__trace { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--trace-hot) 45%, transparent)); }
 .btn-trace__path { stroke: var(--trace-hot); stroke-width: 5.5; }
