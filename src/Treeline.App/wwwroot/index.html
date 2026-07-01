@@ -43,6 +43,11 @@
       </div>
     </div>
 
+    <nav class="view-switch" aria-label="App views">
+      <button class="view-chip active" type="button" data-view-target="home">Workspace</button>
+      <button class="view-chip" type="button" data-view-target="components">UI Components</button>
+    </nav>
+
     <div class="stats" id="stats"></div>
 
     <div class="toolbar">
@@ -60,8 +65,40 @@
     </div>
   </header>
 
-  <main id="content" class="content">
-    <div class="empty" id="loading">Loading…</div>
+  <main class="page-shell">
+    <section class="page-view" data-view="home">
+      <div id="content" class="content">
+        <div class="empty" id="loading">Loading…</div>
+      </div>
+    </section>
+
+    <section class="page-view" data-view="components" hidden>
+      <div class="components-page">
+        <div class="components-hero">
+          <span class="motion-lab-kicker">Library</span>
+          <h1>UI Components</h1>
+          <p>Visual experiments and interaction patterns live here until they are ready for the main workspace.</p>
+        </div>
+
+        <section class="motion-lab" aria-label="Button hover prototype">
+          <div class="motion-lab-copy">
+            <span class="motion-lab-kicker">Motion Lab</span>
+            <h2>Bottom-center border trace</h2>
+            <p>The hover ring begins at the middle of the button floor, climbs both sides together, and closes across the top edge.</p>
+          </div>
+
+          <div class="motion-lab-stage">
+            <button class="btn btn-trace" type="button">
+              <span class="btn-trace__label">Trace Border</span>
+              <svg class="btn-trace__trace" viewBox="0 0 260 88" preserveAspectRatio="none" aria-hidden="true">
+                <path class="btn-trace__path" pathLength="100" d="M130 82 H32 A22 22 0 0 1 10 60 V28 A22 22 0 0 1 32 6 H130" />
+                <path class="btn-trace__path" pathLength="100" d="M130 82 H228 A22 22 0 0 0 250 60 V28 A22 22 0 0 0 228 6 H130" />
+              </svg>
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <!-- Toasts -->

@@ -26,6 +26,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $proj = Join-Path $repo 'src\Treeline.App\Treeline.App.csproj'
+$publishMode = if ($FrameworkDependent) { 'framework-dependent' } else { 'self-contained' }
 
 function Step($m) { Write-Host "==> $m" -ForegroundColor Green }
 
@@ -35,7 +36,7 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 
 # --- publish ---
 $stage = Join-Path $env:TEMP ("treeline-publish-" + [guid]::NewGuid().ToString('N'))
-Step "Publishing Treeline ($([bool]$FrameworkDependent ? 'framework-dependent' : 'self-contained')) ..."
+Step "Publishing Treeline ($publishMode) ..."
 $args = @('publish', $proj, '-c', 'Release', '-r', 'win-x64', '-o', $stage, '-p:PublishSingleFile=true')
 if ($FrameworkDependent) { $args += '--self-contained'; $args += 'false' }
 else { $args += '--self-contained'; $args += 'true' }

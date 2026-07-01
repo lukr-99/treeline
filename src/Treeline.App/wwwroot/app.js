@@ -19,6 +19,8 @@ const api = {
   del: (p) => api.call("DELETE", p),
 };
 
+const VIEWS = new Set(["home", "components"]);
+
 /* ---------------- State ---------------- */
 const state = {
   snapshot: null,
@@ -31,6 +33,7 @@ const state = {
   commitCache: new Map(),              // key -> { commits, take, end }
   autoRefresh: localStorage.getItem("tl.autoRefresh") !== "false",
   theme: localStorage.getItem("tl.theme") || "dark",
+  view: "home",
 };
 const logKey = (repoId, path) => `${repoId}|${path}`;
 const persist = () => {
@@ -45,6 +48,247 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const basename = (p) => (p || "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
 const trunc = (s, n = 34) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+const tracedButtons = new WeakSet();
+const buttonTraceObserver = typeof ResizeObserver === "function"
+  ? new ResizeObserver((entries) => entries.forEach(({ target }) => syncButtonTrace(target)))
+  : null;
+function num(v, fallback = 0) {
+  const parsed = Number.parseFloat(v);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+function durationFromLength(length, speed, min, max) {
+  return clamp(length / speed, min, max);
+}
+function cornerRadius(value, extraRadius, maxRadius) {
+  const parts = String(value || "").split(/[ /]+/).map((part) => num(part, 0)).filter((part) => Number.isFinite(part));
+  const base = parts.length ? Math.min(...parts) : 0;
+  return clamp(base + extraRadius, 0, maxRadius);
+}
+function pathClassFor(svg) {
+  return svg.classList.contains("btn-trace__trace") ? "btn-trace__path" : "btn-border-trace__path";
+}
+function getOrCreateButtonTrace(btn) {
+  let svg = btn.querySelector(".btn-border-trace, .btn-trace__trace");
+  if (svg) return svg;
+  svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "btn-border-trace");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("aria-hidden", "true");
+  btn.appendChild(svg);
+  return svg;
+}
+function ensureTracePaths(svg) {
+  const cls = pathClassFor(svg);
+  while (svg.childElementCount < 4) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    svg.appendChild(path);
+  }
+  [...svg.children].slice(0, 4).forEach((node, index) => {
+    const phase = index < 2 ? "lead" : "sweep";
+    node.setAttribute("class", `${cls} trace-path trace-path--${phase}`);
+  });
+  return [...svg.querySelectorAll(`.${cls}`)].slice(0, 4);
+}
+function syncButtonTrace(btn) {
+  const svg = getOrCreateButtonTrace(btn);
+  const [leftLead, rightLead, leftSweep, rightSweep] = ensureTracePaths(svg);
+  const style = getComputedStyle(btn);
+  const pad = num(style.getPropertyValue("--btn-trace-pad"), svg.classList.contains("btn-trace__trace") ? 4 : 3);
+  const strokeWidth = num(style.getPropertyValue("--btn-trace-stroke"), svg.classList.contains("btn-trace__trace") ? 5.5 : 4.2);
+  const width = Math.max(24, btn.offsetWidth + (pad * 2));
+  const height = Math.max(24, btn.offsetHeight + (pad * 2));
+  const strokeInset = strokeWidth / 2;
+  const extraRadius = Math.max(0, pad - strokeInset);
+  const x0 = strokeInset;
+  const y0 = strokeInset;
+  const x1 = width - strokeInset;
+  const y1 = height - strokeInset;
+  const cx = width / 2;
+  const maxRadius = Math.max(0, Math.min((x1 - x0) / 2, (y1 - y0) / 2));
+  const tl = cornerRadius(style.borderTopLeftRadius, extraRadius, maxRadius);
+  const tr = cornerRadius(style.borderTopRightRadius, extraRadius, maxRadius);
+  const br = cornerRadius(style.borderBottomRightRadius, extraRadius, maxRadius);
+  const bl = cornerRadius(style.borderBottomLeftRadius, extraRadius, maxRadius);
+  const leftLeadPath = [
+    `M ${cx} ${y1}`,
+    `H ${x0 + bl}`,
+  ].join(" ");
+  const rightLeadPath = [
+    `M ${cx} ${y1}`,
+    `H ${x1 - br}`,
+  ].join(" ");
+  const leftSweepPath = [
+    `M ${x0 + bl} ${y1}`,
+    `A ${bl} ${bl} 0 0 1 ${x0} ${y1 - bl}`,
+    `V ${y0 + tl}`,
+    `A ${tl} ${tl} 0 0 1 ${x0 + tl} ${y0}`,
+    `H ${cx}`,
+  ].join(" ");
+  const rightSweepPath = [
+    `M ${x1 - br} ${y1}`,
+    `A ${br} ${br} 0 0 0 ${x1} ${y1 - br}`,
+    `V ${y0 + tr}`,
+    `A ${tr} ${tr} 0 0 0 ${x1 - tr} ${y0}`,
+    `H ${cx}`,
+  ].join(" ");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.style.left = `${-pad}px`;
+  svg.style.top = `${-pad}px`;
+  svg.style.width = `${width}px`;
+  svg.style.height = `${height}px`;
+  leftLead.setAttribute("d", leftLeadPath);
+  rightLead.setAttribute("d", rightLeadPath);
+  leftSweep.setAttribute("d", leftSweepPath);
+  rightSweep.setAttribute("d", rightSweepPath);
+  const leadLengths = [];
+  const sweepLengths = [];
+  for (const path of [leftLead, rightLead, leftSweep, rightSweep]) {
+    const length = path.getTotalLength();
+    path.style.setProperty("--trace-length", `${length}`);
+    path.style.strokeWidth = `${strokeWidth}px`;
+    if (path.classList.contains("trace-path--lead")) leadLengths.push(length);
+    else sweepLengths.push(length);
+  }
+  const leadDuration = durationFromLength(Math.max(...leadLengths, 1), 210, 0.24, 0.62);
+  const sweepDuration = durationFromLength(Math.max(...sweepLengths, 1), 265, 0.42, 1.18);
+  const sweepDelay = clamp(leadDuration * 0.42, 0.08, 0.22);
+  const leadExitDelay = clamp(sweepDuration * 0.58, 0.18, 0.46);
+  btn.style.setProperty("--trace-lead-duration", `${leadDuration}s`);
+  btn.style.setProperty("--trace-sweep-duration", `${sweepDuration}s`);
+  btn.style.setProperty("--trace-sweep-delay", `${sweepDelay}s`);
+  btn.style.setProperty("--trace-lead-exit-delay", `${leadExitDelay}s`);
+}
+function setTraceState(btn, active) {
+  if (btn.disabled) {
+    btn.classList.remove("trace-on", "trace-off");
+    return;
+  }
+  btn.classList.toggle("trace-on", active);
+  btn.classList.toggle("trace-off", !active);
+}
+function refreshTraceState(btn) {
+  const active = btn.matches(":hover, :focus, :focus-visible");
+  if (!active && !btn.classList.contains("trace-on") && !btn.classList.contains("trace-off")) return;
+  setTraceState(btn, active);
+}
+function enhanceButtons(root = document) {
+  root.querySelectorAll(".btn").forEach((btn) => {
+    syncButtonTrace(btn);
+    refreshTraceState(btn);
+    if (tracedButtons.has(btn)) return;
+    tracedButtons.add(btn);
+    if (buttonTraceObserver) buttonTraceObserver.observe(btn);
+    btn.addEventListener("mouseenter", () => refreshTraceState(btn));
+    btn.addEventListener("mouseleave", () => refreshTraceState(btn));
+    btn.addEventListener("focus", () => refreshTraceState(btn));
+    btn.addEventListener("blur", () => refreshTraceState(btn));
+  });
+}
+function finishTransitionOnBody(node, body, cls, onDone) {
+  let settled = false;
+  const done = (event) => {
+    if (settled) return;
+    if (event && event.target !== body) return;
+    if (event && event.propertyName !== "height") return;
+    settled = true;
+    clearTimeout(fallback);
+    body.removeEventListener("transitionend", done);
+    node.classList.remove(cls);
+    if (onDone) onDone();
+  };
+  const fallback = setTimeout(() => done(), 760);
+  body.addEventListener("transitionend", done);
+}
+function getBodyBoxState(body) {
+  const style = getComputedStyle(body);
+  return {
+    paddingTop: style.paddingTop,
+    paddingBottom: style.paddingBottom,
+    borderTopColor: style.borderTopColor,
+  };
+}
+function animateOpen(node, body, expandedClass = null) {
+  node.classList.remove("closing");
+  if (expandedClass) node.classList.add(expandedClass);
+  const box = getBodyBoxState(body);
+  body.style.display = "flex";
+  body.style.overflow = "hidden";
+  body.style.height = "0px";
+  body.style.opacity = "0";
+  body.style.transform = "translateY(-10px)";
+  body.style.paddingTop = "0px";
+  body.style.paddingBottom = "0px";
+  body.style.borderTopColor = "transparent";
+  node.classList.add("opening");
+  void body.offsetHeight;
+  const targetHeight = `${body.scrollHeight}px`;
+  requestAnimationFrame(() => {
+    body.style.height = targetHeight;
+    body.style.opacity = "1";
+    body.style.transform = "translateY(0)";
+    body.style.paddingTop = box.paddingTop;
+    body.style.paddingBottom = box.paddingBottom;
+    body.style.borderTopColor = box.borderTopColor;
+  });
+  finishTransitionOnBody(node, body, "opening", () => {
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.transform = "";
+    body.style.overflow = "";
+    body.style.paddingTop = "";
+    body.style.paddingBottom = "";
+    body.style.borderTopColor = "";
+  });
+}
+function animateClose(node, body, expandedClass = null, onDone = null) {
+  node.classList.remove("opening");
+  const box = getBodyBoxState(body);
+  body.style.display = "flex";
+  body.style.overflow = "hidden";
+  body.style.height = `${body.scrollHeight}px`;
+  body.style.opacity = "1";
+  body.style.transform = "translateY(0)";
+  body.style.paddingTop = box.paddingTop;
+  body.style.paddingBottom = box.paddingBottom;
+  body.style.borderTopColor = box.borderTopColor;
+  node.classList.add("closing");
+  void body.offsetHeight;
+  requestAnimationFrame(() => {
+    body.style.height = "0px";
+    body.style.opacity = "0";
+    body.style.transform = "translateY(-10px)";
+    body.style.paddingTop = "0px";
+    body.style.paddingBottom = "0px";
+    body.style.borderTopColor = "transparent";
+  });
+  finishTransitionOnBody(node, body, "closing", () => {
+    if (expandedClass) node.classList.remove(expandedClass);
+    body.style.display = "none";
+    body.style.height = "";
+    body.style.opacity = "";
+    body.style.transform = "";
+    body.style.overflow = "";
+    body.style.paddingTop = "";
+    body.style.paddingBottom = "";
+    body.style.borderTopColor = "";
+    if (onDone) onDone();
+  });
+}
+function getViewFromHash() {
+  const view = (location.hash || "").replace(/^#/, "");
+  return VIEWS.has(view) ? view : "home";
+}
+function syncView() {
+  state.view = getViewFromHash();
+  document.querySelectorAll("[data-view]").forEach((node) => { node.hidden = node.dataset.view !== state.view; });
+  document.querySelectorAll("[data-view-target]").forEach((node) => node.classList.toggle("active", node.dataset.viewTarget === state.view));
+}
+function setView(view) {
+  if (!VIEWS.has(view)) return;
+  history.replaceState(null, "", view === "home" ? `${location.pathname}${location.search}` : `#${view}`);
+  syncView();
+}
 function relTime(iso) {
   if (!iso) return "";
   const d = new Date(iso), s = (Date.now() - d.getTime()) / 1000;
@@ -128,9 +372,11 @@ function render() {
 
   if (!snap || snap.sources.length === 0) {
     content.innerHTML = `<div class="empty">No sources yet.<div class="empty-cta"><button class="btn btn-primary" data-action="add-source">+ Add your first folder or repo</button></div></div>`;
+    enhanceButtons(content);
     return;
   }
   content.innerHTML = snap.sources.map(renderSource).join("");
+  enhanceButtons(content);
 }
 
 function renderStats() {
@@ -210,13 +456,26 @@ function renderRepoBody(repo) {
 
 function renderBranchesSummary(repo) {
   const branches = state.branchCache.get(repo.id);
-  let counts;
-  if (!branches) counts = `<span class="muted">loading…</span>`;
-  else {
-    const local = branches.filter((b) => !b.isRemote).length;
-    const remote = branches.filter((b) => b.isRemote).length;
+  const counts = !branches
+    ? `<span class="muted">load on demand</span>`
+    : `<span class="muted">${branches.filter((b) => !b.isRemote).length} local Â· ${branches.filter((b) => b.isRemote).length} remote</span>`;
     counts = `<span class="muted">${local} local · ${remote} remote</span>`;
-  }
+  return `
+    <div>
+      <div class="section-title">Branches ${counts}
+        <span class="grow">
+          <button class="btn btn-ghost btn-sm" data-action="view-branches" data-id="${repo.id}">View branches</button>
+          <button class="btn btn-ghost btn-sm" data-action="create-branch" data-id="${repo.id}">+ new branch</button>
+        </span>
+      </div>
+    </div>`;
+}
+
+function renderBranchesSummary(repo) {
+  const branches = state.branchCache.get(repo.id);
+  const counts = !branches
+    ? `<span class="muted">load on demand</span>`
+    : `<span class="muted">${branches.filter((b) => !b.isRemote).length} local · ${branches.filter((b) => b.isRemote).length} remote</span>`;
   return `
     <div>
       <div class="section-title">Branches ${counts}
@@ -310,7 +569,7 @@ $("content").addEventListener("click", async (e) => {
   switch (action) {
     case "add-source": return openAddSource();
     case "reveal": return openExplorer(t.dataset.path);
-    case "toggle-source": toggleSet(state.collapsedSources, id); persist(); return render();
+    case "toggle-source": return toggleSource(id);
     case "toggle-repo": return toggleRepo(id);
     case "toggle-log": return toggleLog(id, wt);
     case "more-log": return moreLog(id, wt);
@@ -332,21 +591,54 @@ $("content").addEventListener("click", async (e) => {
 
 function toggleSet(set, key) { set.has(key) ? set.delete(key) : set.add(key); }
 
+function toggleSource(id) {
+  const node = [...document.querySelectorAll(".source")].find((el) => el.dataset.source === id);
+  const body = node?.querySelector(".source-body");
+  toggleSet(state.collapsedSources, id);
+  persist();
+  if (!node || !body) return;
+  if (state.collapsedSources.has(id)) animateClose(node, body, null, () => node.classList.add("collapsed"));
+  else {
+    node.classList.remove("collapsed");
+    animateOpen(node, body);
+  }
+}
 async function toggleRepo(id) {
-  if (state.openRepos.has(id)) { state.openRepos.delete(id); persist(); return render(); }
-  state.openRepos.add(id); persist(); render();
-  if (!state.branchCache.has(id)) { await loadBranches(id); render(); }
+  const repo = findRepo(id);
+  const node = getRepoNode(id);
+  const body = node?.querySelector(".repo-body");
+  if (!repo || !node || !body) return render();
+  if (state.openRepos.has(id)) {
+    state.openRepos.delete(id);
+    persist();
+    animateClose(node, body, "open", () => { body.innerHTML = ""; });
+    return;
+  }
+  state.openRepos.add(id);
+  persist();
+  body.innerHTML = renderRepoBody(repo);
+  enhanceButtons(body);
+  animateOpen(node, body, "open");
 }
 async function toggleLog(repoId, path) {
   const key = logKey(repoId, path);
-  if (state.openLogs.has(key)) { state.openLogs.delete(key); return render(); }
-  state.openLogs.add(key); render();
-  if (!state.commitCache.has(key)) { await loadCommits(repoId, path, 5); render(); }
+  if (state.openLogs.has(key)) {
+    state.openLogs.delete(key);
+    updateRepoBody(repoId);
+    return;
+  }
+  state.openLogs.add(key);
+  updateRepoBody(repoId);
+  if (!state.commitCache.has(key)) {
+    await loadCommits(repoId, path, 5);
+    updateRepoBody(repoId);
+  }
 }
 async function moreLog(repoId, path) {
   const key = logKey(repoId, path);
   const take = (state.commitCache.get(key)?.take || 5) + 5;
-  await loadCommits(repoId, path, take); render();
+  await loadCommits(repoId, path, take);
+  updateRepoBody(repoId);
 }
 
 async function withSpin(btn, fn) {
@@ -411,7 +703,7 @@ function closeModal() { $("modalOverlay").hidden = true; $("modal").innerHTML = 
 $("modalOverlay").addEventListener("click", (e) => { if (e.target === $("modalOverlay")) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
 
-function showModal(html) { $("modal").innerHTML = html; $("modalOverlay").hidden = false; }
+function showModal(html) { $("modal").innerHTML = html; $("modalOverlay").hidden = false; enhanceButtons($("modal")); }
 
 async function openExplorer(path) {
   try { await api.post("/api/fs/reveal", { path }); }
@@ -459,6 +751,7 @@ function browseFolder(start) {
             <button class="btn btn-primary" id="fsUse" ${data.isRoot ? "disabled" : ""}>Select this folder</button>
           </div>
         </div>`;
+      enhanceButtons(ov);
       ov.querySelector("#fsCancel").onclick = () => done(null);
       ov.querySelector("#fsUse").onclick = () => done(cur);
       ov.querySelector("#fsRoot").onclick = () => load("");
@@ -476,6 +769,29 @@ function findRepo(id) {
   for (const node of state.snapshot?.sources || [])
     for (const repo of node.repositories) if (repo.id === id) return repo;
   return null;
+}
+
+function getRepoNode(id) {
+  return [...document.querySelectorAll(".repo")].find((el) => el.dataset.repo === id) || null;
+}
+
+function updateRepoNode(id) {
+  const repo = findRepo(id);
+  const node = getRepoNode(id);
+  if (!repo || !node) { render(); return; }
+  const parent = node.parentElement;
+  node.outerHTML = renderRepo(repo);
+  if (parent) enhanceButtons(parent);
+}
+
+function updateRepoBody(id) {
+  const repo = findRepo(id);
+  const node = getRepoNode(id);
+  const body = node?.querySelector(".repo-body");
+  if (!repo || !node || !body) { render(); return; }
+  if (!state.openRepos.has(id)) return updateRepoNode(id);
+  body.innerHTML = renderRepoBody(repo);
+  enhanceButtons(body);
 }
 
 /* Branches popup: search, local/remote filter, pagination, checkout/delete. Stands on its own overlay. */
@@ -506,6 +822,7 @@ function openBranchesModal(repoId) {
       <div class="bx-list" id="bxList"><div class="bx-empty">Loading…</div></div>
       <div class="bx-foot" id="bxFoot"></div>
     </div>`;
+  enhanceButtons(ov);
 
   const $$ = (id) => ov.querySelector(id);
   $$("#bxClose").onclick = close;
@@ -562,6 +879,7 @@ function openBranchesModal(repoId) {
         <span>Page ${page} / ${pages}</span>
         <button class="btn btn-ghost btn-sm" id="bxNext" ${page >= pages ? "disabled" : ""}>Next →</button>
       </div>`;
+    enhanceButtons(ov);
     $$("#bxPrev").onclick = () => { if (page > 1) { page--; paint(); } };
     $$("#bxNext").onclick = () => { if (page < pages) { page++; paint(); } };
     ov.querySelectorAll("[data-co]").forEach((btn) => (btn.onclick = () => doCheckout(btn.dataset.co)));
@@ -571,6 +889,7 @@ function openBranchesModal(repoId) {
   async function reload() {
     try { all = await api.get(`/api/repos/${repoId}/branches`); state.branchCache.set(repoId, all); }
     catch { all = []; }
+    updateRepoBody(repoId);
     paint();
   }
   async function doCheckout(branch) {
@@ -712,7 +1031,11 @@ $("refreshAllBtn").onclick = (e) => withSpin(e.currentTarget, refreshAll);
 $("autoRefresh").checked = state.autoRefresh;
 $("autoRefresh").onchange = (e) => { state.autoRefresh = e.target.checked; persist(); };
 $("themeBtn").onclick = () => { state.theme = state.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = state.theme; persist(); };
+document.querySelectorAll("[data-view-target]").forEach((btn) => { btn.onclick = () => setView(btn.dataset.viewTarget); });
+window.addEventListener("hashchange", syncView);
 document.documentElement.dataset.theme = state.theme;
+syncView();
+enhanceButtons(document);
 
 /* ---------------- Boot + polling ---------------- */
 /* Poll a tiny revision endpoint; only pull the full snapshot when it actually changed.
