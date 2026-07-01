@@ -1,20 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <defs>
-    <linearGradient id="trunk" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#10b981"/>
+    <linearGradient id="trunk" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#0f7a55"/>
       <stop offset="1" stop-color="#34d399"/>
     </linearGradient>
   </defs>
   <rect width="256" height="256" rx="56" fill="#0a1f17"/>
-  <g fill="none" stroke-linecap="round" stroke-width="16">
-    <path d="M86 64 V196" stroke="url(#trunk)"/>
-    <path d="M86 116 C128 116 150 90 180 90" stroke="#6ee7b7"/>
-    <path d="M86 150 C110 150 128 184 152 184" stroke="#2dd4bf"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- roots -->
+    <path d="M128 214 C118 224 112 228 100 231 M128 214 C138 224 144 228 156 231" stroke="#0f7a55" stroke-width="9"/>
+    <!-- trunk -->
+    <path d="M128 216 V52" stroke="url(#trunk)" stroke-width="18"/>
+    <!-- lower branches (git-graph forks) -->
+    <path d="M128 152 C104 152 92 130 74 120" stroke="#34d399" stroke-width="13"/>
+    <path d="M128 152 C152 152 164 130 182 120" stroke="#34d399" stroke-width="13"/>
+    <!-- upper branches -->
+    <path d="M128 98 C108 98 100 74 86 60" stroke="#6ee7b7" stroke-width="12"/>
+    <path d="M128 98 C148 98 156 74 170 60" stroke="#6ee7b7" stroke-width="12"/>
   </g>
+  <!-- commit nodes -->
   <g fill="#0a1f17">
-    <circle cx="86" cy="64" r="19" stroke="#34d399" stroke-width="9"/>
-    <circle cx="86" cy="196" r="19" stroke="#34d399" stroke-width="9"/>
-    <circle cx="180" cy="90" r="19" stroke="#6ee7b7" stroke-width="9"/>
-    <circle cx="152" cy="184" r="19" stroke="#2dd4bf" stroke-width="9"/>
+    <circle cx="128" cy="52" r="16" stroke="#6ee7b7" stroke-width="8"/>
+    <circle cx="86" cy="60" r="14" stroke="#6ee7b7" stroke-width="8"/>
+    <circle cx="170" cy="60" r="14" stroke="#6ee7b7" stroke-width="8"/>
+    <circle cx="74" cy="120" r="14" stroke="#34d399" stroke-width="8"/>
+    <circle cx="182" cy="120" r="14" stroke="#34d399" stroke-width="8"/>
+  </g>
+  <!-- fork dots on the trunk -->
+  <g fill="#34d399">
+    <circle cx="128" cy="152" r="7"/>
+    <circle cx="128" cy="98" r="7"/>
   </g>
 </svg>

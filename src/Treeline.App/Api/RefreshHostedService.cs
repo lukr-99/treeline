@@ -21,16 +21,27 @@ public sealed class RefreshHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Initial build before the first tick so the UI has data immediately.
-        await SafeRefresh(stoppingToken);
-
         while (!stoppingToken.IsCancellationRequested)
         {
             var seconds = ResolveIntervalSeconds();
-            try { await Task.Delay(TimeSpan.FromSeconds(seconds), stoppingToken); }
-            catch (OperationCanceledException) { break; }
-            await SafeRefresh(stoppingToken);
+            // Only spend git cycles while a client is actually watching. When idle, poll cheaply
+            // (no git) so we react quickly once the dashboard is opened again.
+            if (_snapshot.ClientActiveWithin(TimeSpan.FromSeconds(seconds * 3)))
+            {
+                await SafeRefresh(stoppingToken);
+                if (await DelayAsync(seconds, stoppingToken)) break;
+            }
+            else
+            {
+                if (await DelayAsync(2, stoppingToken)) break;
+            }
         }
+    }
+
+    private static async Task<bool> DelayAsync(int seconds, CancellationToken ct)
+    {
+        try { await Task.Delay(TimeSpan.FromSeconds(seconds), ct); return false; }
+        catch (OperationCanceledException) { return true; }
     }
 
     private async Task SafeRefresh(CancellationToken ct)

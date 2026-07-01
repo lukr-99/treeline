@@ -47,52 +47,68 @@ public sealed class GitService : IGitService
         var r = await _git.RunAsync(repoPath, ["worktree", "list", "--porcelain"], ct);
         if (!r.Success) return [];
 
-        var result = new List<Worktree>();
-        string? path = null, head = "", branch = null, lockReason = null;
-        bool bare = false, detached = false, locked = false, prunable = false;
-
-        async Task FlushAsync()
-        {
-            if (path is null) return;
-            var exists = Directory.Exists(path);
-            var (status, ahead, behind, upstream) = exists && !bare
-                ? await ReadStatusAsync(path, ct)
-                : (new WorkingTreeStatus(), 0, 0, null);
-            result.Add(new Worktree
-            {
-                Path = path,
-                Head = head,
-                Branch = branch,
-                IsBare = bare,
-                IsDetached = detached,
-                IsLocked = locked,
-                IsPrunable = prunable,
-                LockReason = lockReason,
-                IsMain = result.Count == 0,
-                Status = status,
-                Ahead = ahead,
-                Behind = behind,
-                Upstream = upstream,
-                Exists = exists,
-            });
-            path = null; head = ""; branch = null; lockReason = null;
-            bare = detached = locked = prunable = false;
-        }
-
+        // Pass 1: parse worktree entries (cheap, no extra git calls).
+        var raws = new List<RawWorktree>();
+        RawWorktree? cur = null;
+        void Flush() { if (cur is not null) { raws.Add(cur); cur = null; } }
         foreach (var line in r.StdOut.Split('\n'))
         {
             var l = line.TrimEnd('\r');
-            if (l.Length == 0) { await FlushAsync(); continue; }
-            if (l.StartsWith("worktree ")) { await FlushAsync(); path = l[9..]; }
-            else if (l.StartsWith("HEAD ")) head = l[5..];
-            else if (l.StartsWith("branch ")) branch = ShortenRef(l[7..]);
-            else if (l == "bare") bare = true;
-            else if (l == "detached") detached = true;
-            else if (l.StartsWith("locked")) { locked = true; lockReason = l.Length > 7 ? l[7..] : null; }
-            else if (l.StartsWith("prunable")) prunable = true;
+            if (l.Length == 0) { Flush(); continue; }
+            if (l.StartsWith("worktree ")) { Flush(); cur = new RawWorktree { Path = l[9..] }; }
+            else if (cur is null) continue;
+            else if (l.StartsWith("HEAD ")) cur.Head = l[5..];
+            else if (l.StartsWith("branch ")) cur.Branch = ShortenRef(l[7..]);
+            else if (l == "bare") cur.Bare = true;
+            else if (l == "detached") cur.Detached = true;
+            else if (l.StartsWith("locked")) { cur.Locked = true; cur.LockReason = l.Length > 7 ? l[7..] : null; }
+            else if (l.StartsWith("prunable")) cur.Prunable = true;
         }
-        await FlushAsync();
+        Flush();
+
+        // Pass 2: read working-tree status for each worktree in parallel (bounded).
+        var result = new Worktree[raws.Count];
+        using var gate = new SemaphoreSlim(4);
+        await Task.WhenAll(raws.Select(async (e, i) =>
+        {
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                var exists = Directory.Exists(e.Path);
+                var (status, ahead, behind, upstream) = exists && !e.Bare
+                    ? await ReadStatusAsync(e.Path, ct).ConfigureAwait(false)
+                    : (new WorkingTreeStatus(), 0, 0, null);
+                result[i] = new Worktree
+                {
+                    Path = e.Path,
+                    Head = e.Head,
+                    Branch = e.Branch,
+                    IsBare = e.Bare,
+                    IsDetached = e.Detached,
+                    IsLocked = e.Locked,
+                    IsPrunable = e.Prunable,
+                    LockReason = e.LockReason,
+                    IsMain = i == 0,
+                    Status = status,
+                    Ahead = ahead,
+                    Behind = behind,
+                    Upstream = upstream,
+                    Exists = exists,
+                };
+            }
+            finally { gate.Release(); }
+        })).ConfigureAwait(false);
+
         return result;
+    }
+
+    private sealed class RawWorktree
+    {
+        public required string Path { get; init; }
+        public string Head { get; set; } = "";
+        public string? Branch { get; set; }
+        public bool Bare, Detached, Locked, Prunable;
+        public string? LockReason { get; set; }
     }
 
     private async Task<(WorkingTreeStatus status, int ahead, int behind, string? upstream)> ReadStatusAsync(

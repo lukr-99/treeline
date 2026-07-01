@@ -31,7 +31,18 @@ public static class ApiEndpoints
         });
 
         // ---- read model ----
-        api.MapGet("/snapshot", (SnapshotService snap) => Results.Ok(snap.Current));
+        api.MapGet("/snapshot", (SnapshotService snap) =>
+        {
+            snap.MarkActive();
+            return Results.Ok(snap.Current);
+        });
+
+        // Cheap poll target: clients check this and only fetch the full snapshot when it changes.
+        api.MapGet("/snapshot/revision", (SnapshotService snap) =>
+        {
+            snap.MarkActive();
+            return Results.Ok(new { revision = snap.Revision, generatedAt = snap.Current.GeneratedAt });
+        });
 
         api.MapGet("/repos/{id}", (string id, SnapshotService snap) =>
             snap.Current.FindRepository(id) is { } repo ? Results.Ok(repo) : Results.NotFound());

@@ -1,3 +1,4 @@
+using System.Text;
 using Treeline.Core.Git;
 using Treeline.Core.Models;
 using Treeline.Core.Storage;
@@ -18,6 +19,9 @@ public sealed class SnapshotService
     private const int MaxParallelism = 6;
 
     private volatile TreeSnapshot _current = TreeSnapshot.Empty;
+    private long _revision;
+    private long _lastActivityTicks;
+    private string? _lastSignature;
 
     public SnapshotService(ISourceStore sources, IGitService git, RepositoryScanner scanner)
     {
@@ -27,6 +31,19 @@ public sealed class SnapshotService
     }
 
     public TreeSnapshot Current => _current;
+
+    /// <summary>Monotonic version; changes whenever the snapshot is replaced. Lets clients poll cheaply.</summary>
+    public long Revision => Interlocked.Read(ref _revision);
+
+    /// <summary>Marks that a client is actively watching, so the background loop knows to keep refreshing.</summary>
+    public void MarkActive() => Interlocked.Exchange(ref _lastActivityTicks, DateTimeOffset.UtcNow.Ticks);
+
+    /// <summary>True if a client has polled within <paramref name="window"/>.</summary>
+    public bool ClientActiveWithin(TimeSpan window)
+    {
+        var t = Interlocked.Read(ref _lastActivityTicks);
+        return t != 0 && DateTimeOffset.UtcNow - new DateTimeOffset(t, TimeSpan.Zero) <= window;
+    }
 
     /// <summary>Raised after the cached snapshot is replaced.</summary>
     public event Action<TreeSnapshot>? Updated;
@@ -45,6 +62,7 @@ public sealed class SnapshotService
             _current = new TreeSnapshot
             {
                 GeneratedAt = DateTimeOffset.UtcNow,
+                Revision = ResolveRevision(nodes),
                 GitVersion = gitVersion,
                 Sources = nodes,
             };
@@ -101,15 +119,53 @@ public sealed class SnapshotService
         await _writeLock.WaitAsync(ct);
         try
         {
+            var sources = mutate(_current);
             _current = new TreeSnapshot
             {
                 GeneratedAt = DateTimeOffset.UtcNow,
+                Revision = ResolveRevision(sources),
                 GitVersion = _current.GitVersion,
-                Sources = mutate(_current),
+                Sources = sources,
             };
         }
         finally { _writeLock.Release(); }
         Updated?.Invoke(_current);
+    }
+
+    /// <summary>
+    /// Bumps the revision only when meaningful git state changed, so clients skip re-fetching the
+    /// full snapshot on rebuilds that produced identical data. Called under <see cref="_writeLock"/>.
+    /// </summary>
+    private long ResolveRevision(IReadOnlyList<SourceNode> nodes)
+    {
+        var sig = ContentSignature(nodes);
+        if (sig == _lastSignature) return Interlocked.Read(ref _revision);
+        _lastSignature = sig;
+        return Interlocked.Increment(ref _revision);
+    }
+
+    /// <summary>A stable string over the fields the UI cares about (excludes timestamps).</summary>
+    private static string ContentSignature(IReadOnlyList<SourceNode> nodes)
+    {
+        var sb = new StringBuilder(1024);
+        foreach (var n in nodes)
+        {
+            sb.Append(n.Source.Id).Append('#').Append(n.Error).Append(';');
+            foreach (var r in n.Repositories)
+            {
+                sb.Append(r.Id).Append('|').Append(r.CurrentBranch).Append('|').Append(r.RemoteUrl)
+                  .Append('|').Append(r.IsValid).Append('|').Append(r.Error).Append(':');
+                foreach (var w in r.Worktrees)
+                {
+                    var s = w.Status;
+                    sb.Append(w.Path).Append('~').Append(w.Head).Append('~').Append(w.Branch).Append('~').Append(w.Upstream)
+                      .Append('~').Append(w.Ahead).Append('/').Append(w.Behind)
+                      .Append('~').Append(s.Staged).Append('.').Append(s.Modified).Append('.').Append(s.Untracked).Append('.').Append(s.Conflicted)
+                      .Append('~').Append(w.IsLocked).Append(w.IsPrunable).Append(w.Exists).Append(',');
+                }
+            }
+        }
+        return sb.ToString();
     }
 
     private async Task<SourceNode> BuildSourceNodeAsync(TrackedSource source, CancellationToken ct)
@@ -159,8 +215,11 @@ public sealed class SnapshotService
         {
             var worktreesTask = _git.GetWorktreesAsync(mainPath, ct);
             var remoteTask = _git.GetRemoteUrlAsync(mainPath, ct);
-            var branchTask = _git.GetCurrentBranchAsync(mainPath, ct);
-            await Task.WhenAll(worktreesTask, remoteTask, branchTask);
+            await Task.WhenAll(worktreesTask, remoteTask);
+
+            var worktrees = worktreesTask.Result;
+            // Current branch == the main worktree's branch; avoids a separate rev-parse call.
+            var currentBranch = worktrees.FirstOrDefault(w => w.IsMain)?.Branch;
 
             return new Repository
             {
@@ -169,8 +228,8 @@ public sealed class SnapshotService
                 Name = name,
                 SourceId = sourceId,
                 RemoteUrl = remoteTask.Result,
-                CurrentBranch = branchTask.Result,
-                Worktrees = worktreesTask.Result,
+                CurrentBranch = currentBranch,
+                Worktrees = worktrees,
                 IsValid = true,
                 RefreshedAt = DateTimeOffset.UtcNow,
             };

@@ -15,6 +15,7 @@ public sealed class SourceNode
 public sealed class TreeSnapshot
 {
     public required DateTimeOffset GeneratedAt { get; init; }
+    public long Revision { get; init; }
     public string? GitVersion { get; init; }
     public IReadOnlyList<SourceNode> Sources { get; init; } = [];
 

@@ -22,6 +22,7 @@ const api = {
 /* ---------------- State ---------------- */
 const state = {
   snapshot: null,
+  revision: null,
   health: null,
   openRepos: new Set(JSON.parse(localStorage.getItem("tl.openRepos") || "[]")),
   collapsedSources: new Set(JSON.parse(localStorage.getItem("tl.collapsedSources") || "[]")),
@@ -90,21 +91,29 @@ async function loadCommits(repoId, path, take) {
   } catch { state.commitCache.set(key, { commits: [], take, end: true }); }
 }
 
-/* Re-fetch detail for everything currently expanded (called on each refresh). */
-async function refreshOpenDetails() {
+function eachOpenRepo(fn) {
+  for (const node of state.snapshot?.sources || [])
+    for (const repo of node.repositories)
+      if (state.openRepos.has(repo.id)) fn(repo);
+}
+
+/* Re-fetch only the open commit logs (cheap). Branches are NOT refetched on the timer -
+   they can be large (hundreds of refs) and rarely change; they load on expand / manual refresh. */
+async function refreshOpenLogs() {
   const jobs = [];
-  for (const node of state.snapshot.sources)
-    for (const repo of node.repositories) {
-      if (!state.openRepos.has(repo.id)) continue;
-      jobs.push(loadBranches(repo.id));
-      for (const wt of repo.worktrees) {
-        const key = logKey(repo.id, wt.path);
-        if (state.openLogs.has(key)) {
-          const take = state.commitCache.get(key)?.take || 5;
-          jobs.push(loadCommits(repo.id, wt.path, take));
-        }
-      }
+  eachOpenRepo((repo) => {
+    for (const wt of repo.worktrees) {
+      const key = logKey(repo.id, wt.path);
+      if (state.openLogs.has(key)) jobs.push(loadCommits(repo.id, wt.path, state.commitCache.get(key)?.take || 5));
     }
+  });
+  await Promise.all(jobs);
+}
+
+/* Refresh branch caches for open repos - only on explicit user refresh, never on the timer. */
+async function reloadOpenBranches() {
+  const jobs = [];
+  eachOpenRepo((repo) => jobs.push(loadBranches(repo.id)));
   await Promise.all(jobs);
 }
 
@@ -369,11 +378,15 @@ async function destructive(url, payload, label, repoId, onDone) {
 }
 
 async function refreshAll() {
-  try { state.snapshot = await api.post("/api/refresh", null); await refreshOpenDetails(); render(); }
-  catch (err) { toast("Refresh failed", err.message, "err"); }
+  try {
+    state.snapshot = await api.post("/api/refresh", null);
+    state.revision = state.snapshot.revision;
+    await Promise.all([refreshOpenLogs(), reloadOpenBranches()]);
+    render();
+  } catch (err) { toast("Refresh failed", err.message, "err"); }
 }
-async function refreshSource(id) { await api.post(`/api/refresh/source/${id}`, null); await softRefresh(); }
-async function refreshRepo(id) { state.branchCache.delete(id); await api.post(`/api/refresh/repo/${id}`, null); await softRefresh(); }
+async function refreshSource(id) { await api.post(`/api/refresh/source/${id}`, null); await reloadOpenBranches(); await softRefresh(); }
+async function refreshRepo(id) { state.branchCache.delete(id); await api.post(`/api/refresh/repo/${id}`, null); if (state.openRepos.has(id)) await loadBranches(id); await softRefresh(); }
 
 async function removeSource(id, name) {
   confirmModal("Stop tracking source", `Stop tracking "${name}"? This only removes it from Treeline. Nothing on disk is deleted.`, async () => {
@@ -386,13 +399,10 @@ async function removeSource(id, name) {
 /* Poll snapshot + refresh open details without server-side rebuild.
    When force is false (background poll) we skip re-rendering if nothing changed,
    so interaction animations never replay and the DOM stays stable. */
-let lastSig = null;
-async function softRefresh(force = true) {
+async function softRefresh() {
   await loadSnapshot();
-  const sig = JSON.stringify(state.snapshot);
-  if (!force && sig === lastSig) return;
-  lastSig = sig;
-  await refreshOpenDetails();
+  state.revision = state.snapshot.revision;
+  await refreshOpenLogs();
   render();
 }
 
@@ -705,14 +715,30 @@ $("themeBtn").onclick = () => { state.theme = state.theme === "dark" ? "light" :
 document.documentElement.dataset.theme = state.theme;
 
 /* ---------------- Boot + polling ---------------- */
+/* Poll a tiny revision endpoint; only pull the full snapshot when it actually changed.
+   Skips entirely when auto-refresh is off or the tab is hidden. */
 async function tick() {
-  if (!state.autoRefresh) return;
-  try { await softRefresh(false); } catch { /* transient */ }
+  if (!state.autoRefresh || document.hidden) return;
+  try {
+    const { revision, generatedAt } = await api.get("/api/snapshot/revision");
+    if (revision !== state.revision) await softRefresh();
+    else if (generatedAt) $("updated").textContent = relTime(generatedAt); // keep freshness label live
+  } catch { /* transient */ }
 }
+
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+
 (async function boot() {
   await loadHealth();
-  try { await loadSnapshot(); } catch (err) { $("content").innerHTML = `<div class="error-banner">Could not reach Treeline server: ${esc(err.message)}</div>`; return; }
-  await refreshOpenDetails();
+  try {
+    // Force one immediate build so data shows even if the background loop was idle.
+    state.snapshot = await api.post("/api/refresh", null);
+    state.revision = state.snapshot.revision;
+  } catch (err) {
+    $("content").innerHTML = `<div class="error-banner">Could not reach Treeline server: ${esc(err.message)}</div>`;
+    return;
+  }
+  await Promise.all([refreshOpenLogs(), reloadOpenBranches()]);
   render();
   setInterval(tick, 10000);
 })();
