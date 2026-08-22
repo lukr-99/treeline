@@ -4,6 +4,9 @@ obj/
 publish/
 *.user
 
+# Built installer artifacts (published to GitHub Releases, not committed)
+installer/*.exe
+
 # Rider / VS
 .idea/
 .vs/
