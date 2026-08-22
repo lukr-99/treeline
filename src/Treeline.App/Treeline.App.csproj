@@ -9,7 +9,7 @@
     <AssemblyName>Treeline</AssemblyName>
     <RootNamespace>Treeline.App</RootNamespace>
     <ApplicationIcon>wwwroot\assets\treeline.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Product>Treeline</Product>
     <!-- Self-contained single-file publish defaults (overridable on the CLI) -->
     <RuntimeIdentifier Condition="'$(PublishSingleFile)' == 'true'">win-x64</RuntimeIdentifier>
@@ -21,6 +21,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Treeline.Core\Treeline.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared self-update service (local feed; see nuget.config). -->
+    <PackageReference Include="DotNetLib.Core" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>
