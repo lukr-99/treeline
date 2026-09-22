@@ -47,6 +47,9 @@ The built `.exe` and `installer/publish/` are gitignored — they're Release ass
 
 ## Current state (2026-09-22)
 
-- Updater wired. Installer script + `Treeline.iss` added; the setup `.exe` builds successfully.
-- Version is now **1.2.0** (dashboard UI). No GitHub Release published yet — until one exists with
-  the `.exe` asset, the tray check reports up to date.
+- Updater wired and the release path is live: **v1.2.0** (dashboard UI) is published with
+  `Treeline-Setup-1.2.0.exe` attached, so the tray check has something to find.
+- **v1.2.1** follows it as the first real upgrade, used to exercise download-and-replace.
+- `Treeline.iss` takes its version from `build-installer.ps1` (which reads the csproj). Keep the
+  `#define MyAppVersion` guarded by `#ifndef` — an unconditional one silently stamps every
+  installer with a stale version.

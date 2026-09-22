@@ -9,7 +9,7 @@
     <AssemblyName>Treeline</AssemblyName>
     <RootNamespace>Treeline.App</RootNamespace>
     <ApplicationIcon>wwwroot\assets\treeline.ico</ApplicationIcon>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <Product>Treeline</Product>
     <!-- Self-contained single-file publish defaults (overridable on the CLI) -->
     <RuntimeIdentifier Condition="'$(PublishSingleFile)' == 'true'">win-x64</RuntimeIdentifier>
