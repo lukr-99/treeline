@@ -33,8 +33,11 @@ DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
-CloseApplications=yes
-RestartApplications=no
+; force, not yes: Treeline is a tray app with no top-level window, so Restart Manager cannot
+; close it politely. With plain "yes" a silent update hits "Some applications could not be shut
+; down", and /SUPPRESSMSGBOXES turns that prompt into Abort - the update fails with exit code 5.
+CloseApplications=force
+RestartApplications=yes
 OutputDir=.
 OutputBaseFilename=Treeline-Setup-{#MyAppVersion}
 SetupIconFile=..\src\Treeline.App\wwwroot\assets\treeline.ico
@@ -65,3 +68,13 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDi
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; A silent run means the in-app updater is replacing a running copy. The app exits on its own
+; before Setup starts, so Restart Manager has nothing to restore and the postinstall entry above
+; is skipped - without this the tray would simply vanish after an update.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait; Check: SilentRun
+
+[Code]
+function SilentRun: Boolean;
+begin
+  Result := WizardSilent;
+end;
