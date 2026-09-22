@@ -20,7 +20,11 @@ UI is available to local tools and agents.
 ## Features
 
 - Add either a single repository or a folder that should be scanned for repositories.
-- Browse a tree of tracked sources, repositories, and worktrees.
+- Open on a dashboard of project cards, ordered by latest commit, attention, or name.
+- See what needs you first: conflicts, missing worktrees, behind branches, uncommitted work.
+- Pin the projects you are working on so they stay at the top of the grid.
+- Filter the dashboard by project, branch, or path, and narrow it to what needs attention.
+- Browse a tree of tracked sources, repositories, and worktrees on its own tab.
 - See branch, ahead/behind, dirty-state, and conflict information at a glance.
 - Inspect branch lists and paged commit history for each worktree.
 - Run fetch, pull, checkout, branch creation, worktree creation, and prune operations.
@@ -75,8 +79,11 @@ Useful installer switches:
 3. Add a source as either:
    - a `repo` source for one repository
    - a `folder` source for recursive scanning
-4. Expand repositories to inspect worktrees, branches, and recent commits.
-5. Use the toolbar to refresh, toggle polling, or switch theme.
+4. Work from the **Dashboard** tab: one card per project, with fetch, pull, and
+   Explorer on each, and `worktrees →` to open that project in the tree.
+5. Switch to the **Tree** tab to expand worktrees, branches, and recent commits.
+6. Use the app bar to refresh or add a source; auto-refresh and theme live in its
+   overflow menu.
 
 Treeline binds only to `127.0.0.1`. It is intended for local use on your machine, not as a
 remote service.

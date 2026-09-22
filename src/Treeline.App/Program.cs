@@ -86,7 +86,12 @@ internal static class Program
         var app = builder.Build();
         app.Urls.Add($"http://127.0.0.1:{options.Port}");
         app.UseDefaultFiles();
-        app.UseStaticFiles();
+        // Loopback app, so bandwidth is free: make the browser revalidate every asset.
+        // Without this, an updated install keeps rendering the previous UI from cache.
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache",
+        });
         app.MapTreelineApi();
         return app;
     }

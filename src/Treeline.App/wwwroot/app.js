@@ -19,7 +19,7 @@ const api = {
   del: (p) => api.call("DELETE", p),
 };
 
-const VIEWS = new Set(["home", "components"]);
+const VIEWS = new Set(["dashboard", "home", "components"]);
 
 /* ---------------- State ---------------- */
 const state = {
@@ -33,7 +33,7 @@ const state = {
   commitCache: new Map(),              // key -> { commits, take, end }
   autoRefresh: localStorage.getItem("tl.autoRefresh") !== "false",
   theme: localStorage.getItem("tl.theme") || "dark",
-  view: "home",
+  view: "dashboard",
 };
 const logKey = (repoId, path) => `${repoId}|${path}`;
 const persist = () => {
@@ -277,7 +277,7 @@ function animateClose(node, body, expandedClass = null, onDone = null) {
 }
 function getViewFromHash() {
   const view = (location.hash || "").replace(/^#/, "");
-  return VIEWS.has(view) ? view : "home";
+  return VIEWS.has(view) ? view : "dashboard";
 }
 function syncView() {
   state.view = getViewFromHash();
@@ -286,7 +286,7 @@ function syncView() {
 }
 function setView(view) {
   if (!VIEWS.has(view)) return;
-  history.replaceState(null, "", view === "home" ? `${location.pathname}${location.search}` : `#${view}`);
+  history.replaceState(null, "", view === "dashboard" ? `${location.pathname}${location.search}` : `#${view}`);
   syncView();
 }
 function relTime(iso) {
@@ -318,6 +318,7 @@ async function loadHealth() {
   try {
     state.health = await api.get("/api/health");
     $("gitVersion").textContent = state.health.gitVersion || "git not found";
+    $("menuVersion").textContent = state.health.version ? `Treeline ${state.health.version}` : "";
   } catch { $("gitVersion").textContent = "server unreachable"; }
 }
 async function loadSnapshot() {
@@ -367,7 +368,7 @@ function sourceName(s) { return s.displayName || basename(s.path); }
 function render() {
   const snap = state.snapshot;
   const content = $("content");
-  renderStats();
+  if (typeof renderDashboard === "function") renderDashboard();  // the dashboard tab draws from the same snapshot
   $("updated").textContent = snap ? relTime(snap.generatedAt) : "";
 
   if (!snap || snap.sources.length === 0) {
@@ -377,15 +378,6 @@ function render() {
   }
   content.innerHTML = snap.sources.map(renderSource).join("");
   enhanceButtons(content);
-}
-
-function renderStats() {
-  const s = state.snapshot;
-  if (!s) { $("stats").innerHTML = ""; return; }
-  $("stats").innerHTML =
-    `<span class="stat-chip"><b>${s.sources.length}</b> sources</span>` +
-    `<span class="stat-chip"><b>${s.totalRepositories}</b> repos</span>` +
-    `<span class="stat-chip"><b>${s.totalWorktrees}</b> worktrees</span>`;
 }
 
 function renderSource(node) {
@@ -452,23 +444,6 @@ function renderRepo(repo) {
 function renderRepoBody(repo) {
   // Trees are the primary view; branches live behind a searchable popup.
   return renderWorktrees(repo) + renderBranchesSummary(repo);
-}
-
-function renderBranchesSummary(repo) {
-  const branches = state.branchCache.get(repo.id);
-  const counts = !branches
-    ? `<span class="muted">load on demand</span>`
-    : `<span class="muted">${branches.filter((b) => !b.isRemote).length} local Â· ${branches.filter((b) => b.isRemote).length} remote</span>`;
-    counts = `<span class="muted">${local} local · ${remote} remote</span>`;
-  return `
-    <div>
-      <div class="section-title">Branches ${counts}
-        <span class="grow">
-          <button class="btn btn-ghost btn-sm" data-action="view-branches" data-id="${repo.id}">View branches</button>
-          <button class="btn btn-ghost btn-sm" data-action="create-branch" data-id="${repo.id}">+ new branch</button>
-        </span>
-      </div>
-    </div>`;
 }
 
 function renderBranchesSummary(repo) {
@@ -1025,12 +1000,22 @@ function confirmModal(title, summary, onConfirm, opts = {}) {
 
 function wireClose() { $("modal").querySelectorAll("[data-close]").forEach((b) => (b.onclick = closeModal)); }
 
-/* ---------------- Toolbar wiring ---------------- */
+/* ---------------- App bar wiring ---------------- */
 $("addSourceBtn").onclick = openAddSource;
 $("refreshAllBtn").onclick = (e) => withSpin(e.currentTarget, refreshAll);
 $("autoRefresh").checked = state.autoRefresh;
 $("autoRefresh").onchange = (e) => { state.autoRefresh = e.target.checked; persist(); };
 $("themeBtn").onclick = () => { state.theme = state.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = state.theme; persist(); };
+
+/* Overflow menu holds the controls that are not glance-level, so the bar stays one row.
+   A click inside it keeps it open (flip the theme and watch), anything else closes it. */
+function setMenu(open) {
+  $("moreMenu").hidden = !open;
+  $("moreBtn").setAttribute("aria-expanded", String(open));
+}
+$("moreBtn").onclick = (e) => { e.stopPropagation(); setMenu($("moreMenu").hidden); };
+document.addEventListener("click", (e) => { if (!e.target.closest(".menu-wrap")) setMenu(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
 document.querySelectorAll("[data-view-target]").forEach((btn) => { btn.onclick = () => setView(btn.dataset.viewTarget); });
 window.addEventListener("hashchange", syncView);
 document.documentElement.dataset.theme = state.theme;
@@ -1057,6 +1042,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) tick
     // Force one immediate build so data shows even if the background loop was idle.
     state.snapshot = await api.post("/api/refresh", null);
     state.revision = state.snapshot.revision;
+    await loadHealth();  // the git version is only known once a snapshot has been built
   } catch (err) {
     $("content").innerHTML = `<div class="error-banner">Could not reach Treeline server: ${esc(err.message)}</div>`;
     return;

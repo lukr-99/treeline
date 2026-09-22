@@ -8,7 +8,9 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <header class="topbar">
+  <!-- App bar: brand, views, actions. Everything not needed at a glance
+       (auto-refresh, theme, version) lives in the overflow menu. -->
+  <header class="appbar">
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 256 256" aria-hidden="true">
         <defs>
@@ -29,7 +31,7 @@
           <circle cx="128" cy="150" r="7"/>
           <circle cx="128" cy="112" r="7"/>
         </g>
-        <g fill="var(--bg-elev)">
+        <g fill="var(--surface-raised)">
           <circle cx="128" cy="72" r="15" stroke="#6ee7b7" stroke-width="8"/>
           <circle cx="92" cy="78" r="13" stroke="#6ee7b7" stroke-width="8"/>
           <circle cx="164" cy="78" r="13" stroke="#6ee7b7" stroke-width="8"/>
@@ -44,29 +46,38 @@
     </div>
 
     <nav class="view-switch" aria-label="App views">
-      <button class="view-chip active" type="button" data-view-target="home">Workspace</button>
-      <button class="view-chip" type="button" data-view-target="components">UI Components</button>
+      <button class="view-chip active" type="button" data-view-target="dashboard">Dashboard</button>
+      <button class="view-chip" type="button" data-view-target="home">Tree</button>
+      <button class="view-chip" type="button" data-view-target="components">Components</button>
     </nav>
 
-    <div class="stats" id="stats"></div>
-
-    <div class="toolbar">
+    <div class="appbar-actions">
       <span class="updated" id="updated" title="Last update from the server"></span>
-      <label class="switch" title="Auto-refresh every 10 seconds">
-        <input type="checkbox" id="autoRefresh" checked />
-        <span class="switch-track"><span class="switch-thumb"></span></span>
-        <span class="switch-label">Auto</span>
-      </label>
-      <button class="btn btn-ghost" id="themeBtn" title="Toggle theme">◐</button>
-      <button class="btn btn-ghost" id="refreshAllBtn" title="Refresh everything now">
-        <span class="ico-refresh">↻</span> Refresh
+      <button class="btn btn-ghost btn-icon" id="refreshAllBtn" title="Refresh everything now" aria-label="Refresh everything now">
+        <span class="ico-refresh">↻</span>
       </button>
       <button class="btn btn-primary" id="addSourceBtn">+ Add source</button>
+      <div class="menu-wrap">
+        <button class="btn btn-ghost btn-icon" id="moreBtn" title="More" aria-label="More" aria-haspopup="true" aria-expanded="false">⋯</button>
+        <div class="menu" id="moreMenu" hidden>
+          <label class="menu-row switch" title="Refresh in the background while the dashboard is open">
+            <input type="checkbox" id="autoRefresh" checked />
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-label">Auto refresh</span>
+          </label>
+          <button class="menu-row menu-btn" type="button" id="themeBtn"><span class="menu-ico">◐</span> Toggle theme</button>
+          <div class="menu-foot" id="menuVersion"></div>
+        </div>
+      </div>
     </div>
   </header>
 
   <main class="page-shell">
-    <section class="page-view" data-view="home">
+    <section class="page-view" data-view="dashboard">
+      <div id="dashboard" class="dashboard"><div class="empty">Loading…</div></div>
+    </section>
+
+    <section class="page-view" data-view="home" hidden>
       <div id="content" class="content">
         <div class="empty" id="loading">Loading…</div>
       </div>
@@ -110,5 +121,6 @@
   </div>
 
   <script src="/app.js"></script>
+  <script src="/dashboard.js"></script>
 </body>
 </html>

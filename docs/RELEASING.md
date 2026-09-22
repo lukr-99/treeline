@@ -45,8 +45,8 @@ The built `.exe` and `installer/publish/` are gitignored — they're Release ass
 3. Create a **GitHub Release** tagged `v<version>` and attach `Treeline-Setup-<version>.exe`.
 4. Ensure the repo's Releases are **public**.
 
-## Current state (2026-08-23)
+## Current state (2026-09-22)
 
-- Updater wired (v1.1.0). Installer script + `Treeline.iss` added; `Treeline-Setup-1.1.0.exe` builds
-  successfully. No GitHub Release published yet — until one exists with the `.exe` asset, the tray
-  check reports up to date.
+- Updater wired. Installer script + `Treeline.iss` added; the setup `.exe` builds successfully.
+- Version is now **1.2.0** (dashboard UI). No GitHub Release published yet — until one exists with
+  the `.exe` asset, the tray check reports up to date.
