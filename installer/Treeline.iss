@@ -5,12 +5,16 @@
 ; running copy (the updater launches this with /SILENT /SUPPRESSMSGBOXES /NORESTART).
 
 #define MyAppName "Treeline"
-#define MyAppVersion "1.1.0"
 #define MyAppPublisher "lukr-99"
 #define MyAppExeName "Treeline.exe"
 #define MyAppURL "https://github.com/lukr-99/Treeline"
 
-; Path to the self-contained publish output (passed in via ISCC /D, with a fallback).
+; Both are passed in via ISCC /D by build-installer.ps1, with fallbacks for a direct compile.
+; The version must stay guarded: an unconditional #define here overrides /D, which silently
+; stamps every build with a stale version. build-installer.ps1 reads the real one from the csproj.
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 #ifndef PublishDir
   #define PublishDir "publish"
 #endif
