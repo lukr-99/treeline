@@ -26,6 +26,8 @@ public sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(new ToolStripMenuItem("Refresh all", null, (_, _) => RefreshAll()));
         menu.Items.Add(new ToolStripMenuItem("Open data folder", null, (_, _) => OpenDataFolder()));
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripMenuItem($"Version {GetVersion()}") { Enabled = false });
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, (_, _) => Exit()));
 
         _icon = new NotifyIcon
@@ -42,6 +44,12 @@ public sealed class TrayApplicationContext : ApplicationContext
     }
 
     private void OpenDashboard() => BrowserLauncher.Open(Url);
+
+    private static string GetVersion()
+    {
+        var version = typeof(TrayApplicationContext).Assembly.GetName().Version;
+        return version is null ? "unknown" : $"{version.Major}.{version.Minor}.{version.Build}";
+    }
 
     private void RefreshAll()
     {
