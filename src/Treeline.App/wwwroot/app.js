@@ -19,7 +19,7 @@ const api = {
   del: (p) => api.call("DELETE", p),
 };
 
-const VIEWS = new Set(["dashboard", "home", "components"]);
+const VIEWS = new Set(["dashboard", "home", "components", "about"]);
 
 /* ---------------- State ---------------- */
 const state = {
@@ -319,6 +319,7 @@ async function loadHealth() {
     state.health = await api.get("/api/health");
     $("gitVersion").textContent = state.health.gitVersion || "git not found";
     $("menuVersion").textContent = state.health.version ? `Treeline ${state.health.version}` : "";
+    if (typeof renderAbout === "function") renderAbout();
   } catch { $("gitVersion").textContent = "server unreachable"; }
 }
 async function loadSnapshot() {
