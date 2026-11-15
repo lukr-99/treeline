@@ -49,6 +49,7 @@
       <button class="view-chip active" type="button" data-view-target="dashboard">Dashboard</button>
       <button class="view-chip" type="button" data-view-target="home">Tree</button>
       <button class="view-chip" type="button" data-view-target="components">Components</button>
+      <button class="view-chip" type="button" data-view-target="about">About</button>
     </nav>
 
     <div class="appbar-actions">
@@ -110,6 +111,9 @@
         </section>
       </div>
     </section>
+    <section class="page-view" data-view="about" hidden>
+      <div id="aboutRoot" class="about-page"></div>
+    </section>
   </main>
 
   <!-- Toasts -->
@@ -122,5 +126,7 @@
 
   <script src="/app.js"></script>
   <script src="/dashboard.js"></script>
+  <script src="/about.js"></script>
+  <script>renderAbout();</script>
 </body>
 </html>
