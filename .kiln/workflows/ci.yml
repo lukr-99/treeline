@@ -1,0 +1,30 @@
+# Local (Kiln) CI for Treeline. The repository has no GitHub workflow and no test project, so this runs what
+# the README names as the build ("dotnet build Treeline.slnx"), as far as a Linux container can:
+# - core: restore and Release build of Treeline.Core (net10.0).
+# Left out: Treeline.App. It targets net10.0-windows and needs the DotNetLib.Core package from the local
+# feed ..\dotnetlib\artifacts\nuget (see nuget.config), which does not exist inside a Kiln container, so it
+# cannot be restored there. There are no tests in the repository.
+# Run it with:  kiln run .kiln/workflows/ci.yml --repo .
+name: CI
+
+on:
+  workflow_dispatch:
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  core:
+    name: Build Treeline.Core
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/dotnet/sdk:10.0
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore
+        run: dotnet restore src/Treeline.Core/Treeline.Core.csproj
+
+      - name: Build
+        run: dotnet build src/Treeline.Core/Treeline.Core.csproj -c Release --no-restore
